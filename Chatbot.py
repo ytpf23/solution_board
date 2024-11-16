@@ -2,8 +2,8 @@ from openai import OpenAI
 import streamlit as st
 
 from langchain.agents import initialize_agent, AgentType
-from langchain.callbacks import StreamlitCallbackHandler
-from langchain.chat_models import ChatOpenAI
+from langchain_community.callbacks import StreamlitCallbackHandler
+from langchain_openai import ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
 import os 
 
