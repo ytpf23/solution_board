@@ -37,16 +37,22 @@ def generate_summary(text, llm):
             + chunk
         )
         response = llm.invoke(prompt)
-        summary.append(response)
+        print(type(response.content))
+        summary.append(response.content)
     return "\n\n".join(summary)
 
 with open(f"./{file_name}", "rb") as f:
     # must provide extra_info with file_name key with passing file object
     documents = parser.load_data(f, extra_info=extra_info)
-    print(documents)
-    print(type(documents))
-    print(documents[0].text)
+    # print(documents) #with keys
+    # print(type(documents)) #list
+    for i in range(len(documents)):
+        print(f"----------------- Document ------------ {i} -------")
+        print(documents[i].text)
+    # all_text = " ".join([doc.text for doc in documents])
+    all_text = documents[0].text
+    # print(type(documents[0].text)) # str
     llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=os.getenv("OPENAI_API_KEY"), streaming=True)
-    print(generate_summary(str(documents[0].text), llm))
+    print(generate_summary(str(all_text), llm))
 
 

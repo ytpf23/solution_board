@@ -5,9 +5,9 @@ from langchain.agents import initialize_agent, AgentType
 from langchain.callbacks import StreamlitCallbackHandler
 from langchain.chat_models import ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
+import os 
 
-with st.sidebar:
-    openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 st.title("TechCombinator")
 st.caption("Conncecting industry problems to scientific solutions powered by the Artificial Intelligence")
@@ -21,11 +21,11 @@ if prompt := st.chat_input(placeholder="Who won the Women's U.S. Open in 2018?")
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
-    if not openai_api_key:
+    if not OPENAI_API_KEY:
         st.info("Please add your OpenAI API key to continue.")
         st.stop()
 
-    llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=openai_api_key, streaming=True)
+    llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=OPENAI_API_KEY, streaming=True)
     search = DuckDuckGoSearchRun(name="Search")
     search_agent = initialize_agent(
         [search], llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, handle_parsing_errors=True

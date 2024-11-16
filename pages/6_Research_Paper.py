@@ -38,40 +38,36 @@ def extract_text_with_llamaparse(pdf_file):
         verbose=True,
         language="en",  # Optionally you can define a language, default=en
     )
-    content = parser.load_data(bytes_data, extra_info={"file_name": "_"})
-    # Check if content is a list and convert it to a single string
-    if isinstance(content, list):
-        content = "\n".join(content)
-    
-    print(content[:100])
-    return content
+    documents = parser.load_data(bytes_data, extra_info={"file_name": "_"})
+    all_text = documents[0].text
+    return all_text
 
 # Function to generate a concise summary using CoT approach
 def generate_summary(text, llm):
     # Split long text into manageable chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=100)
     chunks = text_splitter.split_text(text)
-    
+
     # Generate a concise summary using CoT
     summary = []
     for chunk in chunks:
         prompt = (
-            "Summarize the following text in clear, accessible language for a business audience: \n"
+            "Summarize the following text in 5 sentences in clear, accessible language for a business audience: \n"
             + chunk
         )
-        response = llm(prompt)
-        summary.append(response)
+        response = llm.invoke(prompt)
+        summary.append(response.content)
     return "\n\n".join(summary)
 
 # Function to ask targeted questions for refinement
 def ask_followup_question(summary, llm):
     prompt = (
-        "Based on the initial summary below, what question should I ask the researcher to "
+        "Based on the initial summary below, propose a question that would help "
         "clarify any ambiguities or gather additional context?\n"
         + summary
     )
-    response = llm(prompt)
-    return response
+    response = llm.invoke(prompt)
+    return response.content
 
 # Handle file upload
 uploaded_file = st.file_uploader("Upload your research paper (PDF)", type=["pdf"])
@@ -89,7 +85,13 @@ if uploaded_file:
     # Initialize OpenAI LLM
     llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=OPENAI_API_KEY, streaming=True)
 
-    # Generate initial summary
+    # Extract relevant application summary
+    with st.spinner("Generating summary..."):
+        initial_summary = generate_summary(research_text, llm)
+    st.subheader("AI-Generated Summary")
+    st.write(initial_summary)
+
+    # Generate buiness 
     with st.spinner("Generating summary..."):
         initial_summary = generate_summary(research_text, llm)
     st.subheader("AI-Generated Summary")
@@ -117,7 +119,7 @@ if uploaded_file:
             f"Original Summary: {initial_summary}\n\n"
             f"Researcher's Response: {researcher_response}"
         )
-        refined_summary = llm(prompt)
+        refined_summary = llm.invoke(prompt).content
         st.subheader("Refined Summary")
         st.write(refined_summary)
 
