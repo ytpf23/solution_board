@@ -81,6 +81,7 @@ vector_db = PGVector(
 #         st.write(response)
 #         # st.write(get_search_results(vector_db, response))
 
+
 def create_research_agent(vector_db):
     # Initialize memory
     memory = ConversationBufferMemory(
@@ -94,56 +95,67 @@ def create_research_agent(vector_db):
         Only use after gathering user background information.
         """
         results = vector_db.similarity_search_with_score(query, k=5)
-        return [{
+        papers = [{
             'title': doc.metadata['title'],
+            'email' : doc.metadata['email'],
             'abstract': doc.page_content,
             'citations': doc.metadata['n_citation'],
-            'year': doc.metadata['year']
+            'year': doc.metadata['year'],
+            'relevance_score': float(score)
         } for doc, score in results]
+        # Update session state with retrieved papers
+        st.session_state.retrieved_papers = papers
+        return papers
+    
     @tool
-    def analyze_business_impact(company_info: Dict, paper_details: Dict) -> str:
+    def analyze_business_impact() -> str:
         """
-        Generate specific business implementation strategy and impact analysis.
-        Args:
-            company_info: Dict containing industry, company details, and problem
-            paper_details: Scientific paper information
+        Generate specific business implementation strategy and impact analysis based on the retrieved papers. 
+        Start with one exiting one sentence summary of business application that business user can understand.
+        After that provide the paper real name in the breakets. 
+
+        Enchance you responce with 1-2 sentence explanation of business value of implementation. what it can improve and how exactly
+        Make your response structure concise and to the point. 
+        Use bulletpoints and section identifiers. 
+        ALWYS ADD Business Value section in all responces. 
+
         """
-        return f"Business impact analysis for {company_info['company_name']}"
-    @tool
-    def gather_user_context() -> Dict:
-        """
-        Gather essential information about the user's business context.
-        Must ask about:
-        1. Industry sector
-        2. Specific business problem
-        3. Existing solutions or current approaches tried
-        """
-        return {
-            "questions": [
-                "What industry sector does your company operate in?",
-                "Can you describe the specific business problem you're trying to solve?",
-                "What approaches have you already tried to solve this problem?",
-                "What existing solutions are there?"
-            ]
-        }
+        return f"Business impact analysis and implementation strategy for the retrevied papers."
+    
+    # @tool
+    # def gather_user_context() -> Dict:
+    #     """
+    #     Gather essential information about the user's business context.
+    #     Must ask about:
+    #     1. Industry sector
+    #     2. Specific business problem
+    #     3. Existing solutions or current approaches tried
+    #     """
+    #     return {
+    #         "questions": [
+    #             "What industry sector does your company operate in?",
+    #             "Can you describe the specific business problem you're trying to solve?",
+    #             "What approaches have you already tried to solve this problem?",
+    #             "What existing solutions are there?"
+    #         ]
+    #     }
+
     system_prompt = """You are Tech Combinator, an AI research consultant specializing in
-    connecting business problems with scientific solutions.
-    Review the chat history before responding to avoid asking the same questions.
-    Follow this exact process:
-    1. START by using gather_user_context() to ask important questions about the user's
-       business context. Wait for user responses. Use this gather_user_context() tool maximal once at the beginning of conversation.
-       ALWAYS Skip this step if the information is already in chat history.
-    2. AFTER getting context, BEFORE searching:
-       - Analyze the user's industry and problem from chat history
-       - Consider industry-specific terminology that can be commonly used on scientific papers but user might not be aware of
-       - Formulate a specific, technical search query that will find relevant papers and Use paper_search() with your refined query to find relevant papers
-    3. For each relevant paper:
-       - Use analyze_business_impact() to create specific implementation strategies
-       - Focus on practical applications
-       - Highlight potential ROI and competitive advantages
-    4. Summarize your recommendations in a clear, business-friendly manner
-    Always maintain a professional, consultative tone and ensure recommendations are
-    practical and actionable. If you need clarification, ask follow-up questions.
+                        connecting business problems with scientific solutions.
+                        Review the chat history before responding to avoid asking the same questions.
+                        Follow this exact process:
+                        1. BEFORE searching:
+                        - Based on the user company description analyze the user's industry and problem from chat history
+                        - Consider industry-specific terminology that can be commonly used on scientific papers but user might not be aware of
+                        - Formulate a specific, technical search query that will find relevant papers and Use paper_search() with your refined query to find relevant papers
+                        2. For each relevant paper:
+                        - Start with a business applications relevant for the user and add in breakets paper title. Never start with papers title. Main idea is to translate scientific language to business language.
+                        - Use analyze_business_impact() to create specific implementation strategies
+                        - Focus on practical applications
+                        - Highlight potential ROI and competitive advantages
+                        3. Summarize your recommendations in a clear, business-friendly manner
+                        Always maintain a professional, consultative tone and ensure recommendations are
+                        practical and actionable. If you need clarification, ask follow-up questions.
     """
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
@@ -152,9 +164,9 @@ def create_research_agent(vector_db):
         MessagesPlaceholder(variable_name="agent_scratchpad")
     ])
 
-    st.write(prompt)
+    # st.write(prompt)
 
-    tools = [gather_user_context, paper_search, analyze_business_impact]
+    tools = [paper_search, analyze_business_impact]
     llm = ChatOpenAI(
         model_name="gpt-4o-mini",
         temperature=1,
@@ -170,19 +182,23 @@ def create_research_agent(vector_db):
 
 agent_executor = create_research_agent(vector_db)
 
-# Usage with Streamlit
 def main():
-
     st.title("TechCombinator")
-    st.caption("Conncecting industry problems to scientific solutions powered by the Artificial Intelligence")
-    # Initialize session state
+    st.caption("Connecting industry problems to scientific solutions powered by Artificial Intelligence")
+    # Initialize session state variables
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "retrieved_papers" not in st.session_state:
+        st.session_state.retrieved_papers = []
+    if "sources_container" not in st.session_state:
+        st.session_state.sources_container = st.empty()
     # Display chat history
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
     # Chat input
     if prompt := st.chat_input("Describe your business challenge..."):
+        # Clear previous sources container
+        st.session_state.sources_container.empty()
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
         if not OPENAI_API_KEY:
@@ -196,7 +212,49 @@ def main():
             )
             st.session_state.messages.append({"role": "assistant", "content": response["output"]})
             st.write(response["output"])
-
+            # Update sources in the container
+            st.session_state.sources_container = st.empty()
+            with st.session_state.sources_container.container():
+                with st.expander(" --- Retrieved Sources --- ", expanded=False):
+                    if len(st.session_state.retrieved_papers) > 0:
+                        df = pd.DataFrame(st.session_state.retrieved_papers)
+                        df['abstract'] = df['abstract'].str[:200] + '...'
+                        df['relevance_score'] = df['relevance_score'].round(3)
+                        df = df[[
+                            'title',
+                            'email',
+                            'year',
+                            'citations',
+                            'relevance_score',
+                            'abstract'
+                        ]].rename(columns={
+                            'citations': 'Citation Count',
+                            'email': 'Key Contact',
+                            'relevance_score': 'Relevance Score',
+                            'year': 'Year',
+                            'title': 'Title',
+                            'abstract': 'Abstract Preview'
+                        })
+                        st.dataframe(
+                            df,
+                            column_config={
+                                "Title": st.column_config.TextColumn("Title", width="medium"),
+                                "Year": st.column_config.NumberColumn("Year", format="%d"),
+                                "Citation Count": st.column_config.NumberColumn("Citations"),
+                                "Relevance Score": st.column_config.NumberColumn(
+                                    "Relevance",
+                                    help="Higher score indicates more relevance to query",
+                                    format="%.3f"
+                                ),
+                                "Abstract Preview": st.column_config.TextColumn(
+                                    "Abstract Preview",
+                                    width="large"
+                                )
+                            },
+                            hide_index=True,
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("No papers retrieved yet.")
 if __name__ == "__main__":
     main()
-
